@@ -3,12 +3,15 @@
         "process_name": "recipe-decider",
         "process_wasm_path": "/recipe-decider.wasm",
         "on_exit": "Restart",
-        "request_networking": true,
+        "request_networking": false,
         "request_capabilities": [
+            "homepage:homepage:sys",
             "http-server:distro:sys",
             "vfs:distro:sys"
         ],
-        "grant_capabilities": [],
-        "public": true
+        "grant_capabilities": [
+            "http-server:distro:sys"
+        ],
+        "public": false
     }
 ]

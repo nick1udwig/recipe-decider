@@ -5,9 +5,9 @@ use rand::prelude::*;
 use crate::hyperware::process::recipe_decider::{
     Recipe, Request as RecipeDeciderRequest, Response as RecipeDeciderResponse,
 };
-use hyperware_process_lib::logging::{error, info, init_logging, Level};
+use hyperware_process_lib::logging::{debug, error, info, init_logging, Level};
 use hyperware_process_lib::{
-    await_message, call_init, get_blob, get_state,
+    await_message, call_init, get_blob, get_state, homepage,
     http::server::{
         send_response, HttpBindingConfig, HttpServer, HttpServerRequest, StatusCode,
         WsBindingConfig, WsMessageType,
@@ -58,14 +58,14 @@ enum State {
 
 impl State {
     fn new() -> Self {
-        info!("State::new 0");
+        debug!("State::new 0");
         if let Some(ref state) = get_state() {
-            info!("State::new 1: {state:?}");
+            debug!("State::new 1: {state:?}");
             let Ok(state) = serde_json::from_slice::<State>(state) else {
-                info!("State::new 2");
+                debug!("State::new 2");
                 return Self::default();
             };
-            info!("State::new 3");
+            debug!("State::new 3");
             match state {
                 Self::V1 { recipes, .. } => {
                     return Self::V1 {
@@ -75,7 +75,7 @@ impl State {
                 }
             }
         }
-        info!("State::new 4");
+        debug!("State::new 4");
         Self::default()
     }
 
@@ -88,7 +88,7 @@ impl State {
 
     fn save(&self) {
         let state_bytes = serde_json::to_vec(&self).unwrap();
-        info!("save: {state_bytes:?}");
+        debug!("save: {state_bytes:?}");
         set_state(&state_bytes);
     }
 
@@ -167,11 +167,11 @@ fn handle_http_server_request(
             ref path,
             channel_id,
         } => {
-            info!("WebSocket open at path: {}", path);
+            debug!("WebSocket open at path: {}", path);
             server.handle_websocket_open(path, channel_id);
         }
         HttpServerRequest::WebSocketClose(channel_id) => {
-            info!("WebSocket close for channel: {}", channel_id);
+            debug!("WebSocket close for channel: {}", channel_id);
             server.handle_websocket_close(channel_id);
         }
         HttpServerRequest::WebSocketPush { .. } => {
@@ -181,7 +181,7 @@ fn handle_http_server_request(
             };
 
             // Try to parse the WebSocket message as a recipe request
-            info!("Received WebSocketPush with data");
+            debug!("Received WebSocketPush with data");
             handle_recipe_decider_request(
                 our,
                 &make_http_address(our),
@@ -192,11 +192,11 @@ fn handle_http_server_request(
             )?;
         }
         HttpServerRequest::Http(request) => {
-            info!("Received HTTP request: {}", request.method().unwrap());
+            debug!("Received HTTP request: {}", request.method().unwrap());
             match request.method().unwrap().as_str() {
                 // Get all recipes
                 "GET" => {
-                    info!("GET request for recipes, returning {} recipes", state.len());
+                    debug!("GET request for recipes, returning {} recipes", state.len());
                     let headers = HashMap::from([(
                         "Content-Type".to_string(),
                         "application/json".to_string(),
@@ -213,7 +213,7 @@ fn handle_http_server_request(
                 }
                 // Add a recipe or roll a recipe
                 "POST" => {
-                    info!("POST request received");
+                    debug!("POST request received");
                     let Some(blob) = last_blob() else {
                         info!("No blob in POST request");
                         send_response(StatusCode::BAD_REQUEST, None, vec![]);
@@ -222,7 +222,7 @@ fn handle_http_server_request(
 
                     // Log the request body for debugging
                     if let Ok(body_str) = std::str::from_utf8(&blob.bytes) {
-                        info!("POST request body: {}", body_str);
+                        debug!("POST request body: {}", body_str);
                     }
 
                     // We'll let the recipe handler function handle the response
@@ -234,7 +234,7 @@ fn handle_http_server_request(
                         state,
                         server,
                     ) {
-                        Ok(_) => info!("Successfully processed recipe request"),
+                        Ok(_) => debug!("Successfully processed recipe request"),
                         Err(e) => {
                             info!("Error processing recipe request: {:?}", e);
                             send_response(StatusCode::INTERNAL_SERVER_ERROR, None, vec![]);
@@ -312,19 +312,19 @@ fn handle_recipe_decider_request(
         if let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) {
             // Handle the {"RollRecipe": true} format
             if let Some(true) = json.get("RollRecipe").and_then(|v| v.as_bool()) {
-                info!("Detected RollRecipe request in non-standard format");
+                debug!("Detected RollRecipe request in non-standard format");
                 return handle_roll_recipe(is_http, state, server);
             }
 
             // Handle the {"DeleteRecipe": {"index": number}} format
             if let Some(delete_recipe) = json.get("DeleteRecipe") {
                 if let Some(index) = delete_recipe.get("index").and_then(|v| v.as_u64()) {
-                    info!("Detected DeleteRecipe request with index: {}", index);
+                    debug!("Detected DeleteRecipe request with index: {}", index);
 
                     // Check if the index is valid
                     if (index as usize) < state.len() {
                         // Remove the recipe
-                        info!("Removing recipe at index: {}", index);
+                        debug!("Removing recipe at index: {}", index);
                         state.remove(index as usize);
                         state.save();
 
@@ -381,7 +381,7 @@ fn handle_recipe_decider_request(
                             recipe.get("name").and_then(|n| n.as_str()),
                             recipe.get("instructions").and_then(|i| i.as_str()),
                         ) {
-                            info!("Detected UpdateRecipe request with index: {}", index);
+                            debug!("Detected UpdateRecipe request with index: {}", index);
 
                             // Update the recipe
                             let updated = state.update(
@@ -393,7 +393,7 @@ fn handle_recipe_decider_request(
                             );
 
                             if updated {
-                                info!("Updated recipe at index: {}", index);
+                                debug!("Updated recipe at index: {}", index);
                                 state.save();
 
                                 if is_http {
@@ -448,7 +448,7 @@ fn handle_recipe_decider_request(
     // Continue with the standard deserialization
     match body.try_into()? {
         RecipeDeciderRequest::AddRecipe(new_recipe) => {
-            info!(
+            debug!(
                 "Adding new recipe: {} with instructions: {}",
                 new_recipe.name, new_recipe.instructions
             );
@@ -458,7 +458,7 @@ fn handle_recipe_decider_request(
 
             if is_http {
                 // If is HTTP from FE: we need to send a response with the updated recipe list
-                info!("HTTP request for AddRecipe, sending response");
+                debug!("HTTP request for AddRecipe, sending response");
                 let headers =
                     HashMap::from([("Content-Type".to_string(), "application/json".to_string())]);
 
@@ -546,6 +546,7 @@ fn init(our: Address) {
     init_logging(Level::INFO, Level::DEBUG, None, None, None).unwrap();
     info!("begin");
 
+    homepage::add_to_homepage("Recipe Decider", None, Some("/"), None);
     let mut state = State::new();
 
     let mut server = HttpServer::new(5);
