@@ -41,7 +41,7 @@ struct DeleteRecipeRequest {
     index: usize,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, process_macros::SerdeJsonInto)]
+#[derive(serde::Serialize, serde::Deserialize)]
 enum State {
     V1 {
         recipes: Vec<Recipe>,
@@ -52,15 +52,24 @@ enum State {
 
 impl State {
     fn new() -> Self {
-        if let Some(ref recipes) = get_state() {
-            let Ok(recipes) = serde_json::from_slice(recipes) else {
+        info!("State::new 0");
+        if let Some(ref state) = get_state() {
+            info!("State::new 1: {state:?}");
+            let Ok(state) = serde_json::from_slice::<State>(state) else {
+                info!("State::new 2");
                 return Self::default();
             };
-            return State::V1 {
-                recipes,
-                rng: rand::rng(),
-            };
+            info!("State::new 3");
+            match state {
+                Self::V1 { recipes, .. } => {
+                    return Self::V1 {
+                        recipes,
+                        rng: rand::rng(),
+                    }
+                }
+            }
         }
+        info!("State::new 4");
         Self::default()
     }
 
@@ -72,7 +81,8 @@ impl State {
     }
 
     fn save(&self) {
-        let state_bytes: Vec<u8> = self.into();
+        let state_bytes = serde_json::to_vec(&self).unwrap();
+        info!("save: {state_bytes:?}");
         set_state(&state_bytes);
     }
 
