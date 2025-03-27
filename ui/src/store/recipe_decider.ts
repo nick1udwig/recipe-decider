@@ -6,8 +6,8 @@ export interface RecipeDeciderStore {
   recipes: Recipes
   rolledRecipe: Recipe | null
   currentTab: 'roll' | 'input'
-  editingRecipe: Recipe | null
   editingRecipeIndex: number | null
+  isEditMode: boolean
   deleteConfirmation: {
     isOpen: boolean;
     recipeIndex: number | null;
@@ -15,7 +15,7 @@ export interface RecipeDeciderStore {
   addRecipe: (recipe: NewRecipe) => void
   updateRecipe: (index: number, updatedRecipe: Recipe) => void
   deleteRecipe: (index: number) => void
-  setEditingRecipe: (recipe: Recipe | null, index: number | null) => void
+  setEditMode: (isEdit: boolean, recipeIndex: number | null) => void
   setDeleteConfirmation: (isOpen: boolean, recipeIndex: number | null) => void
   setRolledRecipe: (rolledRecipe: Recipe | null) => void
   setCurrentTab: (tab: 'roll' | 'input') => void
@@ -29,8 +29,8 @@ const useRecipeDeciderStore = create<RecipeDeciderStore>()(
       recipes: [],
       rolledRecipe: null,
       currentTab: 'roll',
-      editingRecipe: null,
       editingRecipeIndex: null,
+      isEditMode: false,
       deleteConfirmation: {
         isOpen: false,
         recipeIndex: null,
@@ -47,10 +47,10 @@ const useRecipeDeciderStore = create<RecipeDeciderStore>()(
         const { recipes } = get()
         const newRecipes = [...recipes]
         newRecipes[index] = updatedRecipe
-        set({ 
+        set({
           recipes: newRecipes,
-          editingRecipe: null,
-          editingRecipeIndex: null 
+          editingRecipeIndex: null,
+          isEditMode: false
         })
       },
       deleteRecipe: (index: number) => {
@@ -58,8 +58,8 @@ const useRecipeDeciderStore = create<RecipeDeciderStore>()(
         const newRecipes = recipes.filter((_, i) => i !== index)
         set({ recipes: newRecipes })
       },
-      setEditingRecipe: (recipe: Recipe | null, index: number | null) => {
-        set({ editingRecipe: recipe, editingRecipeIndex: index })
+      setEditMode: (isEdit: boolean, recipeIndex: number | null) => {
+        set({ isEditMode: isEdit, editingRecipeIndex: recipeIndex })
       },
       setDeleteConfirmation: (isOpen: boolean, recipeIndex: number | null) => {
         set({ deleteConfirmation: { isOpen, recipeIndex } })

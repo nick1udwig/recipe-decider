@@ -4,7 +4,6 @@ import "./App.css";
 import { AddRecipeMessage, DeleteRecipeMessage, Recipe, RollRecipeMessage, UpdateRecipeMessage } from "./types/RecipeDecider";
 import useRecipeDeciderStore from "./store/recipe_decider";
 import ConfirmationModal from "./components/ConfirmationModal";
-import EditRecipeForm from "./components/EditRecipeForm";
 
 const BASE_URL = import.meta.env.BASE_URL;
 if (window.our) window.our.process = BASE_URL?.replace("/", "");
@@ -17,7 +16,18 @@ const WEBSOCKET_URL = import.meta.env.DEV
   : undefined;
 
 function App() {
-  const { recipes, rolledRecipe, currentTab, addRecipe, setRolledRecipe, setCurrentTab, set } = useRecipeDeciderStore();
+  const {
+    recipes,
+    rolledRecipe,
+    currentTab,
+    isEditMode,
+    editingRecipeIndex,
+    addRecipe,
+    setRolledRecipe,
+    setCurrentTab,
+    setEditMode,
+    set
+  } = useRecipeDeciderStore();
 
   const [recipeName, setRecipeName] = useState("");
   const [recipeInstructions, setRecipeInstructions] = useState("");
@@ -92,79 +102,131 @@ function App() {
     }
   }, []);
 
-  const handleAddRecipe = useCallback(
+  const handleSubmitRecipe = useCallback(
     async (event) => {
       event.preventDefault();
 
       if (!recipeName || !recipeInstructions) return;
 
-      console.log("Adding recipe:", recipeName, recipeInstructions);
+      if (isEditMode && editingRecipeIndex !== null) {
+        // Update existing recipe
+        console.log("Updating recipe:", recipeName, recipeInstructions);
 
-      // Create a message object to add a recipe
-      const data = {
-        AddRecipe: {
+        // Create a message object to update a recipe
+        const updatedRecipe = {
           name: recipeName,
           instructions: recipeInstructions,
-        },
-      } as AddRecipeMessage;
+        };
 
-      try {
-        console.log("Sending POST request to:", `${BASE_URL}/recipes`);
-        const result = await fetch(`${BASE_URL}/recipes`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(data),
-        });
+        const data = {
+          UpdateRecipe: {
+            index: editingRecipeIndex,
+            recipe: updatedRecipe
+          }
+        } as UpdateRecipeMessage;
 
-        if (!result.ok) throw new Error("HTTP request failed");
-
-        // Try to parse the response
         try {
-          const responseData = await result.json();
-          console.log("Response data:", responseData);
+          const result = await fetch(`${BASE_URL}/recipes`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(data),
+          });
 
-          if (responseData.RecipeAdded && responseData.RecipeAdded.recipe) {
-            console.log("Recipe added from response:", responseData.RecipeAdded.recipe);
-            addRecipe(responseData.RecipeAdded.recipe);
-          } else {
+          if (!result.ok) throw new Error("HTTP request failed");
+
+          // Update local state
+          useRecipeDeciderStore.getState().updateRecipe(editingRecipeIndex, updatedRecipe);
+          setEditMode(false, null);
+
+          // Reset form
+          setRecipeName("");
+          setRecipeInstructions("");
+
+          // Refresh the recipe list
+          fetch(`${BASE_URL}/recipes`)
+            .then((response) => response.json())
+            .then((data) => {
+              console.log("Updated recipes after update:", data.Recipes);
+              if (data.Recipes) {
+                set({ recipes: data.Recipes });
+              }
+            })
+            .catch((error) => console.error("Error refreshing recipes:", error));
+        } catch (error) {
+          console.error("Error updating recipe:", error);
+        }
+      } else {
+        // Add new recipe
+        console.log("Adding recipe:", recipeName, recipeInstructions);
+
+        // Create a message object to add a recipe
+        const data = {
+          AddRecipe: {
+            name: recipeName,
+            instructions: recipeInstructions,
+          },
+        } as AddRecipeMessage;
+
+        try {
+          console.log("Sending POST request to:", `${BASE_URL}/recipes`);
+          const result = await fetch(`${BASE_URL}/recipes`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(data),
+          });
+
+          if (!result.ok) throw new Error("HTTP request failed");
+
+          // Try to parse the response
+          try {
+            const responseData = await result.json();
+            console.log("Response data:", responseData);
+
+            if (responseData.RecipeAdded && responseData.RecipeAdded.recipe) {
+              console.log("Recipe added from response:", responseData.RecipeAdded.recipe);
+              addRecipe(responseData.RecipeAdded.recipe);
+            } else {
+              // Fallback to using the form values
+              console.log("Using form values for recipe");
+              addRecipe({
+                name: recipeName,
+                instructions: recipeInstructions,
+              });
+            }
+          } catch (parseError) {
+            console.error("Error parsing response:", parseError);
             // Fallback to using the form values
-            console.log("Using form values for recipe");
+            console.log("Using form values for recipe (after parse error)");
             addRecipe({
               name: recipeName,
               instructions: recipeInstructions,
             });
           }
-        } catch (parseError) {
-          console.error("Error parsing response:", parseError);
-          // Fallback to using the form values
-          console.log("Using form values for recipe (after parse error)");
-          addRecipe({
-            name: recipeName,
-            instructions: recipeInstructions,
-          });
+
+          // Refresh the list of recipes
+          console.log("Refreshing recipe list");
+          fetch(`${BASE_URL}/recipes`)
+            .then((response) => response.json())
+            .then((data) => {
+              console.log("Updated recipes:", data.Recipes);
+              if (data.Recipes) {
+                set({ recipes: data.Recipes });
+              }
+            })
+            .catch((error) => console.error("Error refreshing recipes:", error));
+
+          setRecipeName("");
+          setRecipeInstructions("");
+        } catch (error) {
+          console.error("Error adding recipe:", error);
         }
-
-        // Refresh the list of recipes
-        console.log("Refreshing recipe list");
-        fetch(`${BASE_URL}/recipes`)
-          .then((response) => response.json())
-          .then((data) => {
-            console.log("Updated recipes:", data.Recipes);
-            if (data.Recipes) {
-              set({ recipes: data.Recipes });
-            }
-          })
-          .catch((error) => console.error("Error refreshing recipes:", error));
-
-        setRecipeName("");
-        setRecipeInstructions("");
-      } catch (error) {
-        console.error("Error adding recipe:", error);
       }
     },
-    [recipeName, recipeInstructions, addRecipe, set]
+    [recipeName, recipeInstructions, isEditMode, editingRecipeIndex, addRecipe, setEditMode, set]
   );
 
   const handleRollRecipe = useCallback(
@@ -203,56 +265,17 @@ function App() {
   // For delete confirmation modal
   const { deleteConfirmation, setDeleteConfirmation } = useRecipeDeciderStore();
 
-  // For editing recipes
-  const { editingRecipe, editingRecipeIndex, setEditingRecipe } = useRecipeDeciderStore();
+  // Effect to populate form when entering edit mode
+  useEffect(() => {
+    if (isEditMode && editingRecipeIndex !== null && recipes[editingRecipeIndex]) {
+      const recipeToEdit = recipes[editingRecipeIndex];
+      setRecipeName(recipeToEdit.name);
+      setRecipeInstructions(recipeToEdit.instructions);
 
-  // Handle recipe update
-  const handleUpdateRecipe = useCallback(async (updatedRecipe: Recipe) => {
-    if (editingRecipeIndex === null) return;
-
-    try {
-      console.log("Updating recipe with index:", editingRecipeIndex);
-
-      // Create a message object to update a recipe
-      const data = {
-        UpdateRecipe: {
-          index: editingRecipeIndex,
-          recipe: updatedRecipe
-        }
-      } as UpdateRecipeMessage;
-
-      // Send update request to backend
-      const result = await fetch(`${BASE_URL}/recipes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!result.ok) {
-        throw new Error(`HTTP error! status: ${result.status}`);
-      }
-
-      // Update local state
-      useRecipeDeciderStore.getState().updateRecipe(editingRecipeIndex, updatedRecipe);
-      setEditingRecipe(null, null);
-
-      // Refresh the recipe list from the server to ensure consistency
-      fetch(`${BASE_URL}/recipes`)
-        .then((response) => response.json())
-        .then((data) => {
-          console.log("Updated recipes after update:", data.Recipes);
-          if (data.Recipes) {
-            set({ recipes: data.Recipes });
-          }
-        })
-        .catch((error) => console.error("Error refreshing recipes:", error));
-
-    } catch (error) {
-      console.error("Error updating recipe:", error);
+      // Also switch to the input tab
+      setCurrentTab('input');
     }
-  }, [editingRecipeIndex, setEditingRecipe, BASE_URL, set]);
+  }, [isEditMode, editingRecipeIndex, recipes, setCurrentTab]);
 
   // Handle recipe delete
   const handleDeleteRecipe = useCallback(async () => {
@@ -394,34 +417,26 @@ function App() {
                   <ul className="recipe-list">
                     {recipes.map((recipe, index) => (
                       <li key={index}>
-                        {editingRecipeIndex === index ? (
-                          <EditRecipeForm
-                            recipe={editingRecipe || recipe}
-                            onSave={handleUpdateRecipe}
-                            onCancel={() => setEditingRecipe(null, null)}
-                          />
-                        ) : (
-                          <div className="recipe-item">
-                            <h4>{recipe.name}</h4>
-                            <p>{recipe.instructions}</p>
-                            <div className="recipe-actions">
-                              <button
-                                className="action-button edit-button"
-                                onClick={() => setEditingRecipe(recipe, index)}
-                                title="Edit Recipe"
-                              >
-                                ✏️
-                              </button>
-                              <button
-                                className="action-button delete-button"
-                                onClick={() => setDeleteConfirmation(true, index)}
-                                title="Delete Recipe"
-                              >
-                                🗑️
-                              </button>
-                            </div>
+                        <div className="recipe-item">
+                          <h4>{recipe.name}</h4>
+                          <p>{recipe.instructions}</p>
+                          <div className="recipe-actions">
+                            <button
+                              className="action-button edit-button"
+                              onClick={() => setEditMode(true, index)}
+                              title="Edit Recipe"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              className="action-button delete-button"
+                              onClick={() => setDeleteConfirmation(true, index)}
+                              title="Delete Recipe"
+                            >
+                              🗑️
+                            </button>
                           </div>
-                        )}
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -435,9 +450,11 @@ function App() {
                   padding: "1.5em",
                 }}
               >
-                <h3 style={{ marginTop: 0, textAlign: 'left' }}>Add New Recipe</h3>
+                <h3 style={{ marginTop: 0, textAlign: 'left' }}>
+                  {isEditMode ? 'Edit Recipe' : 'Add New Recipe'}
+                </h3>
                 <form
-                  onSubmit={handleAddRecipe}
+                  onSubmit={handleSubmitRecipe}
                   style={{ display: "flex", flexDirection: "column" }}
                 >
                   <label
@@ -456,6 +473,7 @@ function App() {
                     id="recipeName"
                     value={recipeName}
                     onChange={(event) => setRecipeName(event.target.value)}
+                    required
                   />
 
                   <label
@@ -474,9 +492,27 @@ function App() {
                     id="recipeInstructions"
                     value={recipeInstructions}
                     onChange={(event) => setRecipeInstructions(event.target.value)}
+                    required
                   />
 
-                  <button type="submit">Add Recipe</button>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    {isEditMode && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditMode(false, null);
+                          setRecipeName("");
+                          setRecipeInstructions("");
+                        }}
+                        style={{ marginRight: "10px" }}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button type="submit" style={{ flexGrow: isEditMode ? 1 : 0 }}>
+                      {isEditMode ? 'Save Changes' : 'Add Recipe'}
+                    </button>
+                  </div>
                 </form>
               </div>
             </div>
