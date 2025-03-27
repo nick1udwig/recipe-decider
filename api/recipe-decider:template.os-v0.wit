@@ -1,0 +1,30 @@
+interface recipe-decider {
+    /// Represents a recipe with a name and instructions
+    record recipe {
+        name: string,
+        instructions: string,
+    }
+
+    variant request {
+        /// Add a new recipe
+        add-recipe(recipe),
+        /// Get all stored recipes
+        get-recipes,
+        /// Roll a random recipe
+        roll-recipe,
+    }
+
+    variant response {
+        /// Response to add-recipe
+        recipe-added,
+        /// Response to get-recipes with list of all recipes
+        recipes(list<recipe>),
+        /// Response to roll-recipe with the randomly selected recipe
+        rolled-recipe(option<recipe>),
+    }
+}
+
+world recipe-decider-template-dot-os-v0 {
+    import recipe-decider;
+    include process-v1;
+}
