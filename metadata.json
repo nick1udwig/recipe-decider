@@ -6,7 +6,12 @@
         "package_name": "recipe-decider",
         "current_version": "0.1.0",
         "publisher": "nick.hypr",
-        "mirrors": [],
+        "mirrors": [
+            "nick.hypr",
+            "nick1udwig.os",
+            "diligence.os",
+            "yael-solutions.os"
+        ],
         "code_hashes": {
             "0.1.0": "de2b9fe0a7b667ddb4b70a01c2a458cb63079bf0efd9e97f9c1db2000f1451f9"
         },
