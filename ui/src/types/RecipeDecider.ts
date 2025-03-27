@@ -26,6 +26,13 @@ export interface DeleteRecipeMessage {
   }
 }
 
+export interface UpdateRecipeMessage {
+  UpdateRecipe: {
+    index: number,
+    recipe: Recipe
+  }
+}
+
 export interface GetRecipesMessage {
   GetRecipes: true
 }

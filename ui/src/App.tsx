@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import HyperwareClientApi from "@hyperware-ai/client-api";
 import "./App.css";
-import { AddRecipeMessage, DeleteRecipeMessage, Recipe, RollRecipeMessage } from "./types/RecipeDecider";
+import { AddRecipeMessage, DeleteRecipeMessage, Recipe, RollRecipeMessage, UpdateRecipeMessage } from "./types/RecipeDecider";
 import useRecipeDeciderStore from "./store/recipe_decider";
 import ConfirmationModal from "./components/ConfirmationModal";
 import EditRecipeForm from "./components/EditRecipeForm";
@@ -18,7 +18,7 @@ const WEBSOCKET_URL = import.meta.env.DEV
 
 function App() {
   const { recipes, rolledRecipe, currentTab, addRecipe, setRolledRecipe, setCurrentTab, set } = useRecipeDeciderStore();
-  
+
   const [recipeName, setRecipeName] = useState("");
   const [recipeInstructions, setRecipeInstructions] = useState("");
   const [nodeConnected, setNodeConnected] = useState(true);
@@ -30,7 +30,7 @@ function App() {
       .then((response) => response.json())
       .then((data) => {
         set({ recipes: data?.Recipes || [] });
-        
+
         // If there are no recipes, open to the input tab, else open to the roll tab
         if (data?.Recipes?.length === 0) {
           setCurrentTab('input');
@@ -124,7 +124,7 @@ function App() {
         try {
           const responseData = await result.json();
           console.log("Response data:", responseData);
-          
+
           if (responseData.RecipeAdded && responseData.RecipeAdded.recipe) {
             console.log("Recipe added from response:", responseData.RecipeAdded.recipe);
             addRecipe(responseData.RecipeAdded.recipe);
@@ -145,7 +145,7 @@ function App() {
             instructions: recipeInstructions,
           });
         }
-        
+
         // Refresh the list of recipes
         console.log("Refreshing recipe list");
         fetch(`${BASE_URL}/recipes`)
@@ -157,7 +157,7 @@ function App() {
             }
           })
           .catch((error) => console.error("Error refreshing recipes:", error));
-        
+
         setRecipeName("");
         setRecipeInstructions("");
       } catch (error) {
@@ -202,39 +202,73 @@ function App() {
 
   // For delete confirmation modal
   const { deleteConfirmation, setDeleteConfirmation } = useRecipeDeciderStore();
-  
+
   // For editing recipes
   const { editingRecipe, editingRecipeIndex, setEditingRecipe } = useRecipeDeciderStore();
-  
+
   // Handle recipe update
   const handleUpdateRecipe = useCallback(async (updatedRecipe: Recipe) => {
     if (editingRecipeIndex === null) return;
-    
+
     try {
-      // Call API to update recipe (if you have an update endpoint)
-      // For now, we'll just update it in the store
+      console.log("Updating recipe with index:", editingRecipeIndex);
+
+      // Create a message object to update a recipe
+      const data = {
+        UpdateRecipe: {
+          index: editingRecipeIndex,
+          recipe: updatedRecipe
+        }
+      } as UpdateRecipeMessage;
+
+      // Send update request to backend
+      const result = await fetch(`${BASE_URL}/recipes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!result.ok) {
+        throw new Error(`HTTP error! status: ${result.status}`);
+      }
+
+      // Update local state
       useRecipeDeciderStore.getState().updateRecipe(editingRecipeIndex, updatedRecipe);
       setEditingRecipe(null, null);
+
+      // Refresh the recipe list from the server to ensure consistency
+      fetch(`${BASE_URL}/recipes`)
+        .then((response) => response.json())
+        .then((data) => {
+          console.log("Updated recipes after update:", data.Recipes);
+          if (data.Recipes) {
+            set({ recipes: data.Recipes });
+          }
+        })
+        .catch((error) => console.error("Error refreshing recipes:", error));
+
     } catch (error) {
       console.error("Error updating recipe:", error);
     }
-  }, [editingRecipeIndex, setEditingRecipe]);
-  
+  }, [editingRecipeIndex, setEditingRecipe, BASE_URL, set]);
+
   // Handle recipe delete
   const handleDeleteRecipe = useCallback(async () => {
     const recipeIndex = deleteConfirmation.recipeIndex;
     if (recipeIndex === null) return;
-    
+
     try {
       console.log("Deleting recipe with index:", recipeIndex);
-      
+
       // Create a message object to delete a recipe
       const data = {
         DeleteRecipe: {
           index: recipeIndex
         }
       } as DeleteRecipeMessage;
-      
+
       // Send delete request to backend
       const result = await fetch(`${BASE_URL}/recipes`, {
         method: "POST",
@@ -243,15 +277,15 @@ function App() {
         },
         body: JSON.stringify(data),
       });
-      
+
       if (!result.ok) {
         throw new Error(`HTTP error! status: ${result.status}`);
       }
-      
+
       // Update local state
       useRecipeDeciderStore.getState().deleteRecipe(recipeIndex);
       setDeleteConfirmation(false, null);
-      
+
       // Refresh the recipe list from the server to ensure consistency
       fetch(`${BASE_URL}/recipes`)
         .then((response) => response.json())
@@ -262,7 +296,7 @@ function App() {
           }
         })
         .catch((error) => console.error("Error refreshing recipes:", error));
-        
+
     } catch (error) {
       console.error("Error deleting recipe:", error);
     }
@@ -279,27 +313,27 @@ function App() {
           </h4>
         </div>
       )}
-      
+
       <div className="app-header">
         <h2>Recipe Decider</h2>
         <p>Store your favorite recipes and let us pick one for you!</p>
       </div>
-      
+
       <div className="tabs">
-        <button 
+        <button
           className={`tab ${currentTab === 'roll' ? 'active' : ''}`}
           onClick={() => setCurrentTab('roll')}
         >
           Roll Recipe
         </button>
-        <button 
+        <button
           className={`tab ${currentTab === 'input' ? 'active' : ''}`}
           onClick={() => setCurrentTab('input')}
         >
           Input Recipe
         </button>
       </div>
-      
+
       {/* Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={deleteConfirmation.isOpen}
@@ -308,18 +342,18 @@ function App() {
         onConfirm={handleDeleteRecipe}
         onCancel={() => setDeleteConfirmation(false, null)}
       />
-      
+
       <div className="card">
         {currentTab === 'roll' ? (
           <div className="roll-tab">
-            <button 
-              onClick={handleRollRecipe} 
+            <button
+              onClick={handleRollRecipe}
               className="roll-button"
               disabled={recipes.length === 0}
             >
               Roll
             </button>
-            
+
             {recipes.length === 0 ? (
               <p>No recipes available. Please add some recipes first.</p>
             ) : (
@@ -346,9 +380,9 @@ function App() {
               }}
             >
               <div
-                style={{ 
-                  padding: "1.5em", 
-                  maxHeight: "400px", 
+                style={{
+                  padding: "1.5em",
+                  maxHeight: "400px",
                   overflowY: "auto",
                   borderBottom: "1px solid var(--border-color)"
                 }}
@@ -371,14 +405,14 @@ function App() {
                             <h4>{recipe.name}</h4>
                             <p>{recipe.instructions}</p>
                             <div className="recipe-actions">
-                              <button 
+                              <button
                                 className="action-button edit-button"
                                 onClick={() => setEditingRecipe(recipe, index)}
                                 title="Edit Recipe"
                               >
                                 ✏️
                               </button>
-                              <button 
+                              <button
                                 className="action-button delete-button"
                                 onClick={() => setDeleteConfirmation(true, index)}
                                 title="Delete Recipe"
@@ -423,7 +457,7 @@ function App() {
                     value={recipeName}
                     onChange={(event) => setRecipeName(event.target.value)}
                   />
-                  
+
                   <label
                     style={{ fontWeight: 600, alignSelf: "flex-start" }}
                     htmlFor="recipeInstructions"
@@ -441,14 +475,14 @@ function App() {
                     value={recipeInstructions}
                     onChange={(event) => setRecipeInstructions(event.target.value)}
                   />
-                  
+
                   <button type="submit">Add Recipe</button>
                 </form>
               </div>
             </div>
           </div>
         )}
-        
+
       </div>
     </div>
   );

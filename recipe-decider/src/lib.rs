@@ -41,6 +41,12 @@ struct DeleteRecipeRequest {
     index: usize,
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize, process_macros::SerdeJsonInto)]
+struct UpdateRecipeRequest {
+    index: usize,
+    recipe: Recipe,
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 enum State {
     V1 {
@@ -123,6 +129,19 @@ impl State {
     fn remove(&mut self, index: usize) -> Recipe {
         match self {
             State::V1 { recipes, .. } => recipes.remove(index),
+        }
+    }
+
+    fn update(&mut self, index: usize, updated_recipe: Recipe) -> bool {
+        match self {
+            State::V1 { recipes, .. } => {
+                if index < recipes.len() {
+                    recipes[index] = updated_recipe;
+                    true
+                } else {
+                    false
+                }
+            }
         }
     }
 }
@@ -349,6 +368,76 @@ fn handle_recipe_decider_request(
                                 .unwrap(),
                             );
                             return Ok(());
+                        }
+                    }
+                }
+            }
+
+            // Handle the {"UpdateRecipe": {"index": number, "recipe": Recipe}} format
+            if let Some(update_recipe) = json.get("UpdateRecipe") {
+                if let Some(index) = update_recipe.get("index").and_then(|v| v.as_u64()) {
+                    if let Some(recipe) = update_recipe.get("recipe") {
+                        if let (Some(name), Some(instructions)) = (
+                            recipe.get("name").and_then(|n| n.as_str()),
+                            recipe.get("instructions").and_then(|i| i.as_str()),
+                        ) {
+                            info!("Detected UpdateRecipe request with index: {}", index);
+
+                            // Update the recipe
+                            let updated = state.update(
+                                index as usize,
+                                Recipe {
+                                    name: name.to_string(),
+                                    instructions: instructions.to_string(),
+                                },
+                            );
+
+                            if updated {
+                                info!("Updated recipe at index: {}", index);
+                                state.save();
+
+                                if is_http {
+                                    // Send HTTP response
+                                    let headers = HashMap::from([(
+                                        "Content-Type".to_string(),
+                                        "application/json".to_string(),
+                                    )]);
+
+                                    send_response(
+                                        StatusCode::OK,
+                                        Some(headers),
+                                        serde_json::to_vec(&serde_json::json!({
+                                            "RecipeUpdated": { "success": true }
+                                        }))
+                                        .unwrap(),
+                                    );
+
+                                    // Broadcast the update via WebSocket to all clients
+                                    let blob = LazyLoadBlob {
+                                        mime: Some("application/json".to_string()),
+                                        bytes: serde_json::to_vec(&serde_json::json!({
+                                            "RecipesUpdated": { "recipes": state.get_all() }
+                                        }))
+                                        .unwrap(),
+                                    };
+                                    server.ws_push_all_channels(WS_PATH, WsMessageType::Text, blob);
+
+                                    return Ok(());
+                                }
+                            } else {
+                                // Invalid index
+                                if is_http {
+                                    send_response(
+                                        StatusCode::BAD_REQUEST,
+                                        None,
+                                        serde_json::to_vec(&serde_json::json!({
+                                            "error": "Invalid recipe index"
+                                        }))
+                                        .unwrap(),
+                                    );
+                                    return Ok(());
+                                }
+                            }
                         }
                     }
                 }
