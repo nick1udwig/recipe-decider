@@ -1,10 +1,10 @@
 {
     "name": "recipe-decider",
-    "description": "",
+    "description": "For when you can't decide on dinner",
     "image": "",
     "properties": {
         "package_name": "recipe-decider",
-        "current_version": "0.1.0",
+        "current_version": "0.1.1",
         "publisher": "nick.hypr",
         "mirrors": [
             "nick.hypr",
@@ -13,11 +13,12 @@
             "yael-solutions.os"
         ],
         "code_hashes": {
+            "0.1.1": "de2b9fe0a7b667ddb4b70a01c2a458cb63079bf0efd9e97f9c1db2000f1451f9",
             "0.1.0": "de2b9fe0a7b667ddb4b70a01c2a458cb63079bf0efd9e97f9c1db2000f1451f9"
         },
         "wit_version": 1,
         "dependencies": []
     },
-    "external_url": "",
+    "external_url": "https://github.com/nick1udwig/recipe-decider",
     "animation_url": ""
 }
